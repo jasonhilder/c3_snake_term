@@ -38,8 +38,10 @@ extern fn int tb_shutdown();
 
 extern fn int tb_width();
 extern fn int tb_height();
+extern fn int tb_peek_event(TbEvent *event, int timeout_ms);
 extern fn int tb_poll_event(TbEvent *event);
 extern fn int tb_set_input_mode(int mode);
 
 extern fn int tb_print(int x, int y, ulong fg, ulong bg, char* str);
+extern fn int tb_printf(int x, int y, ulong fg, ulong bg, char*fmt, ...);
 extern fn int tb_present();

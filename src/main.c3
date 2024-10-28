@@ -5,34 +5,53 @@ import termbox;
 import std::io;
 import std::thread;
 import std::time;
+import std::math::random;
 
-const uint WIDTH = 50;
-const uint HEIGHT = 26;
+const uint WIDTH = 25;
+const uint HEIGHT = 20;
 
-struct GameState {
+struct GameState 
+{
    Scene scene; 
    bool is_running;
    bool is_paused;
+   bool is_updating;
    termbox::TbEvent event;
 }
 
-struct Scene {
-    char[WIDTH][HEIGHT] grid;
-    Player* player;
-} 
-
-struct Player {
+struct Player 
+{
    int posX;
    int posY;
    char direction;
+   char health;
 }
 
-fn void clear_terminal() {
-    // ANSI escape code to clear the terminal
-    io::printf("\x1b[2J\x1b[H");
+struct Food {
+   int posX;
+   int posY;
+   char health;
 }
 
-fn void init_scene(Scene *scene)
+struct Scene 
+{
+    char[WIDTH][HEIGHT] grid;
+    Player* player;
+    Food* food;
+} 
+
+fn void Scene.create_food(Scene *scene) {
+    int x = random::rand_in_range(2, WIDTH - 3);
+    int y = random::rand_in_range(2, HEIGHT - 3);
+
+    scene.food.posX = x;
+    scene.food.posY = y;
+    scene.food.health = 1;
+
+    scene.grid[scene.food.posY][scene.food.posX] = '$';
+}
+
+fn void Scene.init_scene(Scene *scene)
 {
     for(int i = 0; i < WIDTH - 1; i++) 
     {
@@ -55,17 +74,44 @@ fn void init_scene(Scene *scene)
     }
 }
 
-fn void update_player(Scene *scene) {
+fn void update_player(Scene *scene) 
+{
     scene.grid[scene.player.posY][scene.player.posX] = ' ';
 
-    scene.player.posX += 1;
-    if(scene.player.posX >= WIDTH - 2) {
-        scene.player.posX = 1;
+    switch(scene.player.direction)
+    {
+        case 0:
+            scene.player.posY -= 1;
+        case 1:
+            scene.player.posY += 1;
+        case 2:
+            scene.player.posX -= 1;
+        case 3:
+            scene.player.posX += 1;
+        default:
+            return;
     }
 
-    //scene.player.posY += 1;
-    if(scene.player.posY >= HEIGHT - 2) {
+    if(scene.player.posX >= WIDTH - 2) 
+    {
+        scene.player.posX = 2;
+    } 
+    else if(scene.player.posX == 0) 
+    {
+        scene.player.posX = WIDTH - 3;
+    }
+
+    if(scene.player.posY >= HEIGHT - 1) {
         scene.player.posY = 1;
+    } 
+    else if(scene.player.posY == 0) 
+    {
+        scene.player.posY = HEIGHT - 2;
+    }
+
+    if(scene.player.posY == scene.food.posY && scene.player.posX == scene.food.posX)
+    {
+        scene.food.health = 0; 
     }
 
     scene.grid[scene.player.posY][scene.player.posX] = '*';
@@ -73,117 +119,133 @@ fn void update_player(Scene *scene) {
 
 fn void update_state(GameState *game_state)
 {
-    update_player(game_state.scene);
+    if(termbox::tb_peek_event(&game_state.event, 500) != -6) 
+    {
+        if (game_state.event.type == termbox::TB_EVENT_KEY) 
+        {
+            // 0 == up, 1 == down, 2 == left, 3 == right
+            switch(game_state.event.ch)
+            {
+                case 'w':
+                    game_state.scene.player.direction = 0;
+                case 'a':
+                    game_state.scene.player.direction = 2;
+                case 's':
+                    game_state.scene.player.direction = 1;
+                case 'd':
+                    game_state.scene.player.direction = 3;
+                case 'q':
+                    game_state.is_running = false;
+                default:
+                    game_state.scene.player.direction = game_state.scene.player.direction;
+            }
+        }
+    }
+
+    update_player(&game_state.scene);
+
+    if(game_state.scene.food.health == 0) {
+       game_state.scene.create_food();
+    }
+
+    // check player health
 }
 
 fn void render_scene(Scene scene)
 {
-    foreach(idx, row : scene.grid)
+    foreach(row_index, row : scene.grid)
     {
-        foreach(ri, tile : row) {
-            io::printf("%c", tile);
+        //io::printn(row_index);
+        foreach(col_index, col_val : row) {
+            termbox::tb_printf((int)col_index, (int)row_index, 0, 0, "%c", col_val);
 
-            if(ri == WIDTH - 1) {
-                if(idx == 0) {
-                   io::print(" INSTRUCTIONS:");
-                }
-                if(idx == 1) {
-                    io::print(" (W,A,S,D) Move snake.");
-                }
-                if(idx == 2) {
-                    io::print(" Press 'q' to end game.");
-                }
-                if(idx == 3) {
-                    io::print(" Press 'spacebar' to pause game.");
+            if(col_index == WIDTH - 1) {
+                switch(row_index)
+                {
+                    case(0):
+                        termbox::tb_print((int)col_index + 1, 0, 0, 0, " INSTRUCTIONS:");
+                    case(1):
+                        termbox::tb_print((int)col_index + 1, 1, 0, 0, " (W,A,S,D) Move snake.");
+                    case(2):
+                        termbox::tb_print((int)col_index + 1, 2, 0, 0, " Press 'q' to end game.");
+                    case(3):
+                        termbox::tb_print((int)col_index + 1, 3, 0, 0, " Press 'spacebar' to pause game.");
                 }
             }
         }
-
-        io::print("\n");
     }
+    termbox::tb_present();
 }
 
 
 fn void main() 
 {
     // -----------------------------------------
-
-    const float TARGET_FPS = 30;
+    const float TARGET_FPS = 100;
     const float FRAME_DURATION = 1.0 / TARGET_FPS;
-    const float MOVE_INTERVAL = 0.2;
+    const float MOVE_INTERVAL = 0.1;
 
     // -----------------------------------------
-
     Player player = {
         .posX = 24,
-        .posY = 12
+        .posY = 12,
+        .direction = 1,
+        .health = 1
+    };
+
+    Food food = {
+        .posX = 0, 
+        .posY = 0, 
+        .health = 1
     };
 
     GameState game_state = {
         .scene = {
             .grid = char[WIDTH][HEIGHT] {},
-            .player = &player
+            .player = &player,
+            .food = &food
         },
         .is_running = true,
-        .is_paused = false
+        .is_paused = false,
+        .is_updating = false
     };
 
-    //termbox::tb_init();
-    //termbox::tb_set_input_mode(termbox::TB_INPUT_ESC);
+    // -----------------------------------------
+    game_state.scene.init_scene();
+    game_state.scene.create_food();
 
-    init_scene(&game_state.scene);
+    termbox::tb_init();
+    termbox::tb_set_input_mode(termbox::TB_INPUT_ESC);
+
+    // -----------------------------------------
     Time previous_time = time::now();
     float accumulated_time = 0.0; 
 
-    while(true) {
+    while(game_state.is_running) {
         Time start_time = time::now();
-        float delta_time = (float)time::Time.diff_sec(start_time, previous_time);  
 
-        previous_time = start_time;
-        accumulated_time += delta_time;
-
-        if (accumulated_time >= MOVE_INTERVAL) {
-            accumulated_time -= MOVE_INTERVAL; 
-            update_state(&game_state);
-        }
-        // ------------------------------------------------------
-
-        clear_terminal();      
+        termbox::tb_clear();
+        update_state(&game_state);
         render_scene(game_state.scene);
 
         // ------------------------------------------------------
+
         // Calculate elapsed time since the frame started
         float elapsed_time = (float)time::Time.diff_sec(time::now(), start_time);
         // Calculate remaining sleep time for consistent FPS
         float sleep_time = FRAME_DURATION - elapsed_time;
 
-        if(sleep_time > 0) {
+        if(sleep_time > 0) 
+        {
             ulong sleep_time_ms = (ulong)(sleep_time * 1000); 
             thread::sleep_ms(sleep_time_ms);
         }
-
-        // ------------------------------------------------------
-        /*
-        termbox::tb_poll_event(&event);
-
-        if (event.type == termbox::TB_EVENT_KEY) {
-            if (event.ch == 'a') {
-                termbox::tb_print(0, 0, 0, 0, "A pressed");
-                termbox::tb_present();
-            }
-
-            if (event.ch == 'q') {
-                running = 0;  // Quit on 'q'
-            }
-        }
-
-        termbox::tb_clear();
-        */
     }
-    //termbox::tb_shutdown();
+
+    termbox::tb_shutdown();
 }
+
 /*
    @TODO
-   - termbox2 for input checking during game loop
    - Player or like Entity Structs (Snake and food)
 */
