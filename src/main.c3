@@ -6,6 +6,7 @@ import std::io;
 import std::thread;
 import std::time;
 import std::math::random;
+import std::core::mem;
 
 const uint WIDTH = 25;
 const uint HEIGHT = 20;
@@ -19,12 +20,19 @@ struct GameState
    termbox::TbEvent event;
 }
 
+struct Chunk {
+   int posX;
+   int posY;
+   char direction;
+   Chunk* next;
+}
+
 struct Player 
 {
    int posX;
    int posY;
-   char direction;
-   char health;
+   ushort health;
+   Chunk* head;
 }
 
 struct Food {
@@ -40,7 +48,8 @@ struct Scene
     Food* food;
 } 
 
-fn void Scene.create_food(Scene *scene) {
+fn void Scene.create_food(Scene *scene) 
+{
     int x = random::rand_in_range(2, WIDTH - 3);
     int y = random::rand_in_range(2, HEIGHT - 3);
 
@@ -72,49 +81,94 @@ fn void Scene.init_scene(Scene *scene)
             }
         }
     }
+
+    scene.create_food();
 }
 
 fn void update_player(Scene *scene) 
 {
-    scene.grid[scene.player.posY][scene.player.posX] = ' ';
+    // Variables to track the old tail's position
+    int old_tail_x;
+    int old_tail_y;    
 
-    switch(scene.player.direction)
-    {
-        case 0:
-            scene.player.posY -= 1;
-        case 1:
-            scene.player.posY += 1;
-        case 2:
-            scene.player.posX -= 1;
-        case 3:
-            scene.player.posX += 1;
-        default:
-            return;
-    }
+    // loop over body if it exists
+    if(scene.player.head.next == null) {
+        // Clear the trail
+        scene.grid[scene.player.head.posY][scene.player.head.posX] = ' ';
+    } else {
+        Chunk* current = scene.player.head;
+        Chunk* next = scene.player.head.next;
 
-    if(scene.player.posX >= WIDTH - 2) 
-    {
-        scene.player.posX = 2;
+
+        while(next != null) {
+
+            if(next.next == null) {
+                old_tail_x = next.posX;
+                old_tail_y = next.posY; 
+            };
+
+            // store previous co ords
+            int next_x = next.posX;
+            int next_y = next.posY;
+
+            // Update next
+            int next_new_x = current.posX;
+            int next_new_y = current.posY;
+            char next_new_dir = current.direction;
+
+            next.posX = next_new_x;
+            next.posY = next_new_y;
+            next.direction = next_new_dir;
+
+            current = next;
+            next = next.next;
+        }
+
+        // Clear the old tail position on the grid
+        scene.grid[old_tail_y][old_tail_x] = ' ';
     } 
-    else if(scene.player.posX == 0) 
+
+    switch(scene.player.head.direction)
     {
-        scene.player.posX = WIDTH - 3;
+        case 0: scene.player.head.posY -= 1;
+        case 1: scene.player.head.posY += 1;
+        case 2: scene.player.head.posX -= 1;
+        case 3: scene.player.head.posX += 1;
+        default: return;
     }
 
-    if(scene.player.posY >= HEIGHT - 1) {
-        scene.player.posY = 1;
-    } 
-    else if(scene.player.posY == 0) 
-    {
-        scene.player.posY = HEIGHT - 2;
+    if(scene.player.head.posX >= WIDTH - 2) {
+        scene.player.head.posX = 2;
+    } else if(scene.player.head.posX == 0) {
+        scene.player.head.posX = WIDTH - 3;
     }
 
-    if(scene.player.posY == scene.food.posY && scene.player.posX == scene.food.posX)
+    if(scene.player.head.posY >= HEIGHT - 1) {
+        scene.player.head.posY = 1;
+    } else if(scene.player.head.posY == 0) {
+        scene.player.head.posY = HEIGHT - 2;
+    }
+
+    if( scene.player.head.posY == scene.food.posY && 
+        scene.player.head.posX == scene.food.posX )
     {
+        // Find the last chunk (tail) of the snake
+        Chunk* tail = scene.player.head;
+        while (tail.next != null) {
+            tail = tail.next;
+        }
+
+        Chunk* new_body = mem::malloc(Chunk.sizeof);
+        new_body.posX = tail.posX;
+        new_body.posY = tail.posY;
+        new_body.direction = tail.direction;
+        new_body.next = null;
+        tail.next = new_body;
+
         scene.food.health = 0; 
     }
 
-    scene.grid[scene.player.posY][scene.player.posX] = '*';
+    scene.grid[scene.player.head.posY][scene.player.head.posX] = '*';
 }
 
 fn void update_state(GameState *game_state)
@@ -127,17 +181,17 @@ fn void update_state(GameState *game_state)
             switch(game_state.event.ch)
             {
                 case 'w':
-                    game_state.scene.player.direction = 0;
+                    game_state.scene.player.head.direction = 0;
                 case 'a':
-                    game_state.scene.player.direction = 2;
+                    game_state.scene.player.head.direction = 2;
                 case 's':
-                    game_state.scene.player.direction = 1;
+                    game_state.scene.player.head.direction = 1;
                 case 'd':
-                    game_state.scene.player.direction = 3;
+                    game_state.scene.player.head.direction = 3;
                 case 'q':
                     game_state.is_running = false;
                 default:
-                    game_state.scene.player.direction = game_state.scene.player.direction;
+                    game_state.scene.player.head.direction = game_state.scene.player.head.direction;
             }
         }
     }
@@ -186,11 +240,17 @@ fn void main()
     const float MOVE_INTERVAL = 0.1;
 
     // -----------------------------------------
-    Player player = {
+
+    Chunk head = {
+        .direction = 1,
         .posX = 24,
         .posY = 12,
-        .direction = 1,
-        .health = 1
+        .next = null
+    };
+
+    Player player = {
+        .health = 1,
+        .head = &head
     };
 
     Food food = {
@@ -211,9 +271,8 @@ fn void main()
     };
 
     // -----------------------------------------
-    game_state.scene.init_scene();
-    game_state.scene.create_food();
 
+    game_state.scene.init_scene();
     termbox::tb_init();
     termbox::tb_set_input_mode(termbox::TB_INPUT_ESC);
 
