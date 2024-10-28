@@ -33,6 +33,7 @@ struct Player
    int posY;
    ushort health;
    Chunk* head;
+   // tail maybe?? on new allocation set tail accordingly
 }
 
 struct Food {
@@ -47,6 +48,17 @@ struct Scene
     Player* player;
     Food* food;
 } 
+
+fn void Player.free_body(Player player) {
+    Chunk* current = player.head;
+
+    while (current != null) {
+        Chunk* next = current.next;
+        mem::free(current);
+        current = next;
+    }
+
+}
 
 fn void Scene.create_food(Scene *scene) 
 {
@@ -232,6 +244,7 @@ fn void render_scene(Scene scene)
 }
 
 
+
 fn void main() 
 {
     // -----------------------------------------
@@ -301,10 +314,13 @@ fn void main()
         }
     }
 
+    //cleanup memory of player
+    player.free_body();
     termbox::tb_shutdown();
 }
 
 /*
    @TODO
-   - Player or like Entity Structs (Snake and food)
+    - Print each piece of body
+    - sort out memory freeing/cleanup
 */
