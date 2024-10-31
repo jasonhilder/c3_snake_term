@@ -56,6 +56,7 @@ struct Scene
     Food* food;
 } 
 
+// Utilities
 macro @print_type(value)
 {
     var $Type = $typeof(value);
@@ -395,12 +396,15 @@ fn void main()
     //cleanup memory of player
     termbox::tb_shutdown();
 
+    /*
     @print_type(game_state);
     Chunk* segment = player.head;
     while(segment != null) {
         @print_type(*segment);
         segment = segment.next;
     }
+    */
+
     player.free_body();
 }
 
