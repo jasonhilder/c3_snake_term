@@ -129,25 +129,29 @@ fn void Scene.init_scene(Scene *scene)
     scene.create_food();
 }
 
-fn void update_player(Scene *scene, int *score) 
+fn void update_player(GameState* game_state) 
 {
-    // Now update the positions of all segments based on their direction
-    Chunk* current = scene.player.head;
+    Scene* scene = &game_state.scene;
+    int* score = &game_state.score;
+    LoopState* loop_state = &game_state.loop_state;
 
-    scene.grid[current.posY][current.posX] = ' ';
+    // Now update the positions of all segments based on their direction
+    Chunk* snake_head = scene.player.head;
+
+    scene.grid[snake_head.posY][snake_head.posX] = ' ';
 
     // Variables to track the previous head position
-    int prevPosX = current.posX;
-    int prevPosY = current.posY;    
-    char prevDir = current.direction;    
+    int prevPosX = snake_head.posX;
+    int prevPosY = snake_head.posY;    
+    char prevDir = snake_head.direction;    
 
     // update the head of the snake according to its direction
-    switch(current.direction)
+    switch(snake_head.direction)
     {
-        case 0: current.posY -= 1;
-        case 1: current.posY += 1;
-        case 2: current.posX -= 1;
-        case 3: current.posX += 1;
+        case 0: snake_head.posY -= 1;
+        case 1: snake_head.posY += 1;
+        case 2: snake_head.posX -= 1;
+        case 3: snake_head.posX += 1;
         default: return;
     }
 
@@ -160,12 +164,18 @@ fn void update_player(Scene *scene, int *score)
     else if(scene.player.head.posY == 0) { scene.player.head.posY = HEIGHT - 2; }
 
     // draw the head in its place
-    scene.grid[current.posY][current.posX] = '*';
+    scene.grid[snake_head.posY][snake_head.posX] = '*';
 
     // get the next body part
-    current = current.next;
+    Chunk* current = snake_head.next;
     while(current != null)
     {
+        if(snake_head.posX == current.posX && snake_head.posY == current.posY)
+        {
+            *loop_state = LoopState.GAMEOVER;
+            return;
+        }
+
         scene.grid[current.posY][current.posX] = ' ';
 
         // store the body's pos in temp variables
@@ -210,7 +220,7 @@ fn void update_player(Scene *scene, int *score)
         tail.next = new_body;
 
         scene.food.health = 0; 
-        *score += 5;
+        score += 5;
     }
 }
 
@@ -244,7 +254,7 @@ fn void update_input(GameState *game_state)
                         game_state.scene.player.head.direction = 3;
                     }
                 // spacebar
-                case 0x20:
+                case termbox::TB_KEY_SPACE:
                     if(game_state.loop_state == LoopState.RUNNING) {
                         game_state.loop_state = LoopState.PAUSED; 
                     } else if(game_state.loop_state == LoopState.PAUSED) {
@@ -261,7 +271,8 @@ fn void update_input(GameState *game_state)
 
 fn void update_state(GameState *game_state)
 {
-    update_player(&game_state.scene, &game_state.score);
+    //update_player(&game_state.scene, &game_state.score);
+    update_player(game_state);
 
     if(game_state.scene.food.health == 0) {
        game_state.scene.create_food();
@@ -356,25 +367,28 @@ fn void main()
     while(game_state.loop_state != LoopState.QUIT) {
         Time start_time = time::now();
         update_input(&game_state);
-        termbox::tb_clear();
 
-        if(game_state.loop_state != LoopState.PAUSED) {
-            update_state(&game_state);
-        }
+        if(game_state.loop_state != LoopState.GAMEOVER) {
+            termbox::tb_clear();
 
-        render_scene(game_state);
+            if(game_state.loop_state != LoopState.PAUSED) {
+                update_state(&game_state);
+            }
 
-        // ------------------------------------------------------
+            render_scene(game_state);
 
-        // Calculate elapsed time since the frame started
-        float elapsed_time = (float)time::Time.diff_sec(time::now(), start_time);
-        // Calculate remaining sleep time for consistent FPS
-        float sleep_time = FRAME_DURATION - elapsed_time;
+            // ------------------------------------------------------
 
-        if(sleep_time > 0) 
-        {
-            ulong sleep_time_ms = (ulong)(sleep_time * 1000); 
-            thread::sleep_ms(sleep_time_ms);
+            // Calculate elapsed time since the frame started
+            float elapsed_time = (float)time::Time.diff_sec(time::now(), start_time);
+            // Calculate remaining sleep time for consistent FPS
+            float sleep_time = FRAME_DURATION - elapsed_time;
+
+            if(sleep_time > 0) 
+            {
+                ulong sleep_time_ms = (ulong)(sleep_time * 1000); 
+                thread::sleep_ms(sleep_time_ms);
+            }
         }
     }
 
