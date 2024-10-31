@@ -32,6 +32,8 @@ const int TB_INPUT_MOUSE = 4;
 
 const uint TB_EVENT_KEY = 1;
 
+const uint TB_KEY_SPACE = 0x20;
+
 extern fn int tb_init();
 extern fn int tb_clear();
 extern fn int tb_shutdown();

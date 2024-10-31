@@ -11,12 +11,18 @@ import std::core::mem;
 const uint WIDTH = 25;
 const uint HEIGHT = 20;
 
+enum LoopState : int (String description)
+{
+    RUNNING = "Running",
+    PAUSED = "Paused",
+    GAMEOVER = "Game Over",
+    QUIT = "Quit"
+}
+
 struct GameState 
 {
     Scene scene; 
-    bool is_running;
-    bool is_paused;
-    bool is_updating;
+    LoopState loop_state;
     int score;
     termbox::TbEvent event;
 }
@@ -144,6 +150,15 @@ fn void update_player(Scene *scene, int *score)
         case 3: current.posX += 1;
         default: return;
     }
+
+    // Check if the head postion needs to wrap
+    if(scene.player.head.posX >= WIDTH - 2) { scene.player.head.posX = 2; } 
+    else if(scene.player.head.posX == 0) { scene.player.head.posX = WIDTH - 3; }
+
+    // Check if the head postion needs to wrap
+    if(scene.player.head.posY >= HEIGHT - 1) { scene.player.head.posY = 1; } 
+    else if(scene.player.head.posY == 0) { scene.player.head.posY = HEIGHT - 2; }
+
     // draw the head in its place
     scene.grid[current.posY][current.posX] = '*';
 
@@ -170,12 +185,6 @@ fn void update_player(Scene *scene, int *score)
         scene.grid[current.posY][current.posX] = '*';
         current = current.next;
     }
-
-    if(scene.player.head.posX >= WIDTH - 2) { scene.player.head.posX = 2; } 
-    else if(scene.player.head.posX == 0) { scene.player.head.posX = WIDTH - 3; }
-
-    if(scene.player.head.posY >= HEIGHT - 1) { scene.player.head.posY = 1; } 
-    else if(scene.player.head.posY == 0) { scene.player.head.posY = HEIGHT - 2; }
 
     if( scene.player.head.posY == scene.food.posY && 
         scene.player.head.posX == scene.food.posX )
@@ -205,7 +214,7 @@ fn void update_player(Scene *scene, int *score)
     }
 }
 
-fn void update_state(GameState *game_state)
+fn void update_input(GameState *game_state)
 {
     if(termbox::tb_peek_event(&game_state.event, 500) != -6) 
     {
@@ -219,29 +228,39 @@ fn void update_state(GameState *game_state)
             {
                 case 'w':
                     // prevent reversing
-                    if(current_direction != 1) {
+                    if(current_direction != 1 && game_state.loop_state == LoopState.RUNNING) {
                         game_state.scene.player.head.direction = 0;
                     }
                 case 'a':
-                    if(current_direction != 3) {
+                    if(current_direction != 3 && game_state.loop_state == LoopState.RUNNING) {
                         game_state.scene.player.head.direction = 2;
                     }
                 case 's':
-                    if(current_direction != 0) {
+                    if(current_direction != 0 && game_state.loop_state == LoopState.RUNNING) {
                         game_state.scene.player.head.direction = 1;
                     }
                 case 'd':
-                    if(current_direction != 2) {
+                    if(current_direction != 2 && game_state.loop_state == LoopState.RUNNING) {
                         game_state.scene.player.head.direction = 3;
                     }
+                // spacebar
+                case 0x20:
+                    if(game_state.loop_state == LoopState.RUNNING) {
+                        game_state.loop_state = LoopState.PAUSED; 
+                    } else if(game_state.loop_state == LoopState.PAUSED) {
+                        game_state.loop_state = LoopState.RUNNING; 
+                    }
                 case 'q':
-                    game_state.is_running = false;
+                    game_state.loop_state = LoopState.QUIT;
                 default:
                     game_state.scene.player.head.direction = game_state.scene.player.head.direction;
             }
         }
     }
+}
 
+fn void update_state(GameState *game_state)
+{
     update_player(&game_state.scene, &game_state.score);
 
     if(game_state.scene.food.health == 0) {
@@ -252,8 +271,13 @@ fn void update_state(GameState *game_state)
     // NOTE TODO
 }
 
-fn void render_scene(Scene scene, int score)
+//fn void render_scene(Scene scene, int score)
+fn void render_scene(GameState game_state)
 {
+    Scene scene = game_state.scene;
+    int score = game_state.score;
+    LoopState loop_state = game_state.loop_state;
+
     foreach(row_index, row : scene.grid)
     {
         //io::printn(row_index);
@@ -273,13 +297,14 @@ fn void render_scene(Scene scene, int score)
                         termbox::tb_print((int)col_index + 1, 3, 0, 0, " Press 'spacebar' to pause game.");
                     case(4):
                         termbox::tb_printf((int)col_index + 1, 4, 0, 0, " Score: %d", score);
+                    case(5):
+                        termbox::tb_printf((int)col_index + 1, 5, 0, 0, " Game Info: %s", loop_state.description);
                 }
             }
         }
     }
     termbox::tb_present();
 }
-
 
 
 fn void main() 
@@ -315,9 +340,7 @@ fn void main()
             .player = &player,
             .food = &food
         },
-        .is_running = true,
-        .is_paused = false,
-        .is_updating = false
+        .loop_state = LoopState.RUNNING
     };
 
     // -----------------------------------------
@@ -330,12 +353,16 @@ fn void main()
     Time previous_time = time::now();
     float accumulated_time = 0.0; 
 
-    while(game_state.is_running) {
+    while(game_state.loop_state != LoopState.QUIT) {
         Time start_time = time::now();
-
+        update_input(&game_state);
         termbox::tb_clear();
-        update_state(&game_state);
-        render_scene(game_state.scene, game_state.score);
+
+        if(game_state.loop_state != LoopState.PAUSED) {
+            update_state(&game_state);
+        }
+
+        render_scene(game_state);
 
         // ------------------------------------------------------
 
