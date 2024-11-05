@@ -28,7 +28,7 @@ struct App
     // Info of the games current state
     GameState game_state;
     // Games captured input, handled by termbox
-    tb::TbEvent input_event;
+    Tb_event input_event;
     // Scene is what is displayed, map, world etc
     Scene scene; 
 }
