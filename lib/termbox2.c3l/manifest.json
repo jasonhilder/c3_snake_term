@@ -1,8 +1,19 @@
-{
-    "provides" : "termbox2",
-    "targets" : {
-        "linux-x64" : {
-            "link-args" : [ "./lib/termbox2.c3l/linux-x64/libtermbox2.a" ],
-        }
-    }
+{ 
+  "provides" : "termbox2",
+  "targets" : {
+    "macos-x64" : {
+      "link-args" : [],
+      "dependencies" : [],
+      "linked-libraries" : []
+    },
+    "linux-x64" : {
+      "link-args" : [ "./lib/termbox2.c3l/linux-x64/libtermbox2.a" ],
+      "dependencies" : [],
+      "linked-libraries" : []
+    },
+    "windows-x64" : {
+        "linked-libraries" : [],
+        "wincrt": "none"
+    },
+  }
 }
