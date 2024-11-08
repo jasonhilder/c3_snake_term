@@ -1,5 +1,6 @@
 module snake_boiler::game;
 
+import std::math::random;
 import std::collections::linkedlist;
 import snake_boiler::common;
 import snake_boiler::utils;
@@ -31,12 +32,15 @@ struct App
     Tb_event input_event;
     // Scene is what is displayed, map, world etc
     Scene scene; 
+    // Playes current score
+    int score;
 }
 
 struct Scene 
 {
     char[WIDTH][HEIGHT] grid;
     Snake* snake;
+    Food* food;
 }
 
 struct Snake
@@ -53,6 +57,11 @@ struct BodySegment
     int pos_x;
     int pos_y;
     char direction;
+}
+
+struct Food {
+    int pos_x;
+    int pos_y;
 }
 
 // -----------------------
@@ -115,10 +124,20 @@ fn void Scene.build_scene(Scene *scene)
         }
     }
 
-    //scene.create_food();
+    scene.create_food();
 }
 
 // @TODO Create food
+fn void Scene.create_food(Scene *scene)
+{
+    int x = random::rand_in_range(2, WIDTH - 3);
+    int y = random::rand_in_range(2, HEIGHT - 3);
+
+    scene.food.pos_x = x;
+    scene.food.pos_y = y;
+
+    scene.grid[scene.food.pos_y][scene.food.pos_x] = '$';
+}
 
 // -----------------------
 // SNAKE METHODS:
@@ -142,18 +161,15 @@ fn void Snake.init(Snake* snake)
 fn void update(App* app)
 {
     Scene* scene = &app.scene;
+    int* score = &app.score;
     GameState* game_state = &app.game_state;
     BodySegment* snake_head = &scene.snake.head;
-    //int* score = &game_state.score;
 
     // ----------
     // Variables to track the previous head position
     int prev_pos_x = snake_head.pos_x;
     int prev_pos_y = snake_head.pos_y; 
     char prev_dir = snake_head.direction;    
-
-    // Handle snake head first
-    scene.grid[prev_pos_y][prev_pos_x] = ' ';
 
     // update the head of the snake according to its direction
     switch(snake_head.direction)
@@ -166,27 +182,86 @@ fn void update(App* app)
     }
 
     // Check if the head postion needs to wrap
-    if(scene.snake.head.pos_x >= WIDTH - 2) { scene.snake.head.pos_x = 2; } 
-    else if(scene.snake.head.pos_x == 0) { scene.snake.head.pos_x = WIDTH - 3; }
+    if(snake_head.pos_x >= WIDTH - 2) { snake_head.pos_x = 2; } 
+    else if(snake_head.pos_x == 0) { snake_head.pos_x = WIDTH - 3; }
 
     // Check if the head postion needs to wrap
-    if(scene.snake.head.pos_y >= HEIGHT - 1) { scene.snake.head.pos_y = 1; } 
-    else if(scene.snake.head.pos_y == 0) { scene.snake.head.pos_y = HEIGHT - 2; }
-
-    // draw the head in its place
-    scene.grid[snake_head.pos_y][snake_head.pos_x] = '*';
+    if(snake_head.pos_y >= HEIGHT - 1) { snake_head.pos_y = 1; } 
+    else if(snake_head.pos_y == 0) { snake_head.pos_y = HEIGHT - 2; }
 
     // ----------
     // Update snake body according to the snake heads update.
-    // @TODO
+    usz count = scene.snake.body.len();
+
+    for (int i = 0; i < count; i++) {
+        if(i == 0) {
+            // handle snake head draw the head in its place
+            scene.grid[prev_pos_y][prev_pos_x] = ' ';
+            scene.grid[snake_head.pos_y][snake_head.pos_x] = '*';
+            continue;
+        }
+
+        BodySegment current = scene.snake.body.get(i);
+
+        if(snake_head.pos_x == current.pos_x && snake_head.pos_y == current.pos_y)
+        {
+            *game_state = GameState.GAMEOVER;
+            return;
+        }
+
+        scene.grid[current.pos_y][current.pos_x] = ' ';
+
+        // store the current body's pos in temp variables
+        int temp_pos_x = current.pos_x;
+        int temp_pos_y = current.pos_y;
+        char temp_direction = current.direction;
+
+        // update the bodys spot to be the heads original location
+        current.pos_x = prev_pos_x;
+        current.pos_y = prev_pos_y;
+        current.direction = prev_dir;
+
+        // update the previous pos for the next body segment.
+        prev_pos_x = temp_pos_x;
+        prev_pos_y = temp_pos_y;
+        prev_dir = temp_direction;
+
+        scene.grid[current.pos_y][current.pos_x] = '*';
+        scene.snake.body.set(i, current);
+    }
+
+    // ----------
+    // Handle food eaten
+    if( snake_head.pos_y == scene.food.pos_y && 
+        snake_head.pos_x == scene.food.pos_x )
+    {
+        // Find the last chunk (tail) of the snake
+        BodySegment tail = scene.snake.body.last()!!;
+        BodySegment new_body;
+        new_body.pos_y = tail.pos_x;
+        new_body.pos_x = tail.pos_y;
+        new_body.direction = tail.direction;
+        switch (tail.direction) {
+            case 0: new_body.pos_y += 1; break;
+            case 1: new_body.pos_y -= 1; break; 
+            case 2: new_body.pos_x += 1; break;
+            case 3: new_body.pos_x -= 1; break; 
+        }
+
+        scene.snake.body.push(tail);
+
+        *score += 5;
+        scene.create_food();
+    }
 }
 
 fn void render(App app)
 {
-    //int score = app.score;
+    int score = app.score;
     Scene scene = app.scene;
     GameState game_state = app.game_state;
 
+    tb::tb_clear();
 
     foreach(row_index, row : scene.grid)
     {
@@ -205,8 +280,8 @@ fn void render(App app)
                         tb::tb_print((int)col_index + 1, 2, 0, 0, " Press 'q' to end game.");
                     case(3):
                         tb::tb_print((int)col_index + 1, 3, 0, 0, " Press 'spacebar' to pause game.");
-                    //case(4):
-                        //tb::tb_printf((int)col_index + 1, 4, 0, 0, " Score: %d", score);
+                    case(4):
+                        tb::tb_printf((int)col_index + 1, 4, 0, 0, " Score: %d", score);
                     case(5):
                         tb::tb_printf((int)col_index + 1, 5, 0, 0, " Game Info: %s", app.game_state.description);
                 }

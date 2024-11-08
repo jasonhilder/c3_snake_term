@@ -33,6 +33,12 @@ fn void handle_inputs(game::App* app)
                     if(current_direction != 'L' && app.game_state == GameState.RUNNING) {
                         app.scene.snake.head.direction = 'R';
                     }
+                case tb::TB_KEY_SPACE: // spacebar
+                    if(app.game_state == GameState.RUNNING) {
+                        app.game_state = GameState.PAUSED; 
+                    } else if(app.game_state == GameState.PAUSED) {
+                        app.game_state = GameState.RUNNING; 
+                    }
                 case 'q':
                     app.game_state = game::GameState.QUIT;
                 default:

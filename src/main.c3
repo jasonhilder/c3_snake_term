@@ -7,11 +7,14 @@ import snake_boiler::utils;
 
 App app;
 Snake snake;
+Food food;
 
 fn void main()
 {
 	// setup scene
 	app.scene.snake = &snake;
+	app.scene.food = &food;
+
 	// todo pass args to start_scene
 	app.start_scene();
 
